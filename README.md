@@ -78,6 +78,8 @@ The `kafka connector for SAP Hana` provides several configuration options out of
 
 `{topic}.table.type` - This is a Hana specific configuration setting which allows creation of Row & Column tables if `auto.create` is set to true.
 
+`{topic}.table.partition.mode` - This is a HANA Sink specific configuration setting which determines the table partitioning in HANA. Default value is 'none'. And supported values are 'none', 'hash', 'round_robin'.
+
 - Source
 
 `{topic}.incrementing.column.name` - In order to fetch from a SAP Hana table, an incremental ( or auto-incremental ) column needs to be provided. The type 
