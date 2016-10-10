@@ -10,6 +10,11 @@ To install the connector from source, use the following command.
 mvn clean install -DskipTests
 ```
 
+## Include the SAP HANA Jdbc Jar
+
+- Follow the steps in [this](http://help.sap.com/saphelp_hanaplatform/helpdata/en/ff/15928cf5594d78b841fbbe649f04b4/frameset.htm) guide to access the SAP HANA Jdbc jar.
+- Place it in the same directory as the `Kafka Connector` jar or under the `CLASSPATH` directory.
+
 ## QuickStart
 
 For getting started with this connector, the following steps need to be completed.
