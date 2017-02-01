@@ -2,6 +2,9 @@ package com.sap.kafka.connect.source.querier
 
 import java.util
 
+import com.sap.kafka.client.hana.HANAConfigMissingException
+import com.sap.kafka.utils.ExecuteWithExceptions
+
 class TimestampIncrementingOffset(incrementingOffset: String) {
   def getIncrementingOffset(): String = {
     incrementingOffset
@@ -37,8 +40,12 @@ object TimestampIncrementingOffset {
       return new TimestampIncrementingOffset(DEFAULT_VAL)
     }
 
-    val incr = map.get(INCREMENTING_FIELD).get.toString
-    new TimestampIncrementingOffset(incr)
+    ExecuteWithExceptions[TimestampIncrementingOffset, Exception, HANAConfigMissingException] (
+      new HANAConfigMissingException("incrementing field not found. " +
+        "Clear previously set offsets or check source configurations")) { () =>
+      val incr = map(INCREMENTING_FIELD).toString
+      new TimestampIncrementingOffset(incr)
+    }
   }
 
   def convertToTableDataType(value: String, dataType: Int) = {

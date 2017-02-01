@@ -2,6 +2,7 @@ package com.sap.kafka.connect.config
 
 import java.util
 
+import com.sap.kafka.connect.config.hana.HANAParameters
 import org.scalatest.FunSuite
 
 class HANAConfigTest extends FunSuite {
@@ -17,7 +18,7 @@ class HANAConfigTest extends FunSuite {
     props.put("topics", "test-topic")
     props.put("test-topic.table.name", "\"TEST\".\"TABLE\"")
 
-    val config = Parameters.getConfig(props)
+    val config = HANAParameters.getConfig(props)
 
     assert(config.connectionUrl === props.get("connection.url"))
     assert(config.connectionUser === props.get("connection.user"))
@@ -40,7 +41,7 @@ class HANAConfigTest extends FunSuite {
     props.put("topics", "test-topic")
     props.put("test-topic.table.name", "\"TEST\".\"TABLE\"")
 
-    val config = Parameters.getConfig(props)
+    val config = HANAParameters.getConfig(props)
 
     assert(config.connectionUrl === props.get("connection.url"))
     assert(config.connectionUser === props.get("connection.user"))
@@ -63,7 +64,7 @@ class HANAConfigTest extends FunSuite {
 
     // connection.url missing
     intercept[IllegalArgumentException] {
-      Parameters.getConfig(props)
+      HANAParameters.getConfig(props)
     }
 
     props = new util.HashMap[String, String]()
@@ -78,7 +79,7 @@ class HANAConfigTest extends FunSuite {
 
     // one of connection.user or connection.password missing
     intercept[IllegalArgumentException] {
-      Parameters.getConfig(props)
+      HANAParameters.getConfig(props)
     }
 
     props = new util.HashMap[String, String]()
@@ -93,7 +94,7 @@ class HANAConfigTest extends FunSuite {
 
     // topics is missing
     intercept[IllegalArgumentException] {
-      Parameters.getConfig(props)
+      HANAParameters.getConfig(props)
     }
   }
 
@@ -108,7 +109,7 @@ class HANAConfigTest extends FunSuite {
     props.put("connection.password", "sa")
     props.put("topics", "test-topic")
 
-    val config = Parameters.getConfig(props)
+    val config = HANAParameters.getConfig(props)
 
     intercept[IllegalArgumentException] {
       config.topicProperties("test-topic").get("table.name")
@@ -126,7 +127,7 @@ class HANAConfigTest extends FunSuite {
     props.put("connection.password", "sa")
     props.put("topics", "test-topic")
 
-    val config = Parameters.getConfig(props)
+    val config = HANAParameters.getConfig(props)
 
     intercept[IllegalArgumentException] {
       config.topicProperties("test-topic").get("table.name")

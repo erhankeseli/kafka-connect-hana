@@ -1,8 +1,8 @@
 package com.sap.kafka.connect.source.querier
 
-import com.sap.kafka.hanaClient.HANAJdbcClient
-import com.sap.kafka.connect.config.HANAConfig
-import com.sap.kafka.connect.source.HANASourceConnectorConstants
+import com.sap.kafka.client.hana.HANAJdbcClient
+import com.sap.kafka.connect.config.BaseConfig
+import com.sap.kafka.connect.source.SourceConnectorConstants
 import com.sap.kafka.connect.source.querier.QueryMode.QueryMode
 import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.connect.source.SourceRecord
@@ -10,8 +10,8 @@ import org.apache.kafka.connect.source.SourceRecord
 import scala.collection.JavaConverters._
 
 class BulkTableQuerier(mode: QueryMode, table: String, tablePartition: Int, topic: String,
-                       hanaSourceConfig: HANAConfig, hanaJdbcClient: Option[HANAJdbcClient])
-  extends TableQuerier(mode, table, topic, hanaSourceConfig, hanaJdbcClient) {
+                       config: BaseConfig, jdbcClient: Option[HANAJdbcClient])
+  extends TableQuerier(mode, table, topic, config, jdbcClient) {
   override def createQueryString(): Unit = {
     mode match {
       case QueryMode.TABLE =>
@@ -30,7 +30,7 @@ class BulkTableQuerier(mode: QueryMode, table: String, tablePartition: Int, topi
 
         mode match {
           case QueryMode.TABLE =>
-            partition = Map(HANASourceConnectorConstants.TABLE_NAME_KEY -> tableName)
+            partition = Map(SourceConnectorConstants.TABLE_NAME_KEY -> tableName)
           case _ => throw new ConfigException(s"Unexpected query mode: $mode")
         }
         new SourceRecord(partition.asJava, null, topic,
@@ -50,8 +50,8 @@ class BulkTableQuerier(mode: QueryMode, table: String, tablePartition: Int, topi
     * this just takes the highest available topic partition to write.
     */
   private def getPartition(tablePartition: Int, topic: String): Int = {
-    val maxPartitions = hanaSourceConfig.topicProperties(topic)
-      .get("partition.count").get.toInt
+    val topicProperties = config.topicProperties(topic)
+    val maxPartitions = topicProperties("partition.count").toInt
     tablePartition % maxPartitions
   }
 }

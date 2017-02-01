@@ -2,9 +2,10 @@ package com.sap.kafka.connect.source
 
 import java.util
 
-import com.sap.kafka.hanaClient.MetaSchema
+import com.sap.kafka.client.MetaSchema
 import com.sap.kafka.connect.MockJdbcClient
-import com.sap.kafka.connect.config.Parameters
+import com.sap.kafka.connect.config.hana.HANAParameters
+import com.sap.kafka.connect.source.hana.HANASourceTask
 import org.apache.kafka.common.utils.Time
 import org.apache.kafka.connect.source.SourceTaskContext
 import org.apache.kafka.connect.storage.OffsetStorageReader
@@ -16,12 +17,21 @@ import org.mockito.Matchers.any
 
 class HANASourceTaskTestBase extends FunSuite
                               with BeforeAndAfterAll {
-  protected val SINGLE_TABLE_NAME = "\"TEST\".\"EMPLOYEES_SOURCE\""
-  protected val SECOND_TABLE_NAME = "\"TEST\".\"EMPLOYEES_SOURCE_SECOND\""
-  protected val SINGLE_TABLE_PARTITION = new util.HashMap[String, Object]()
-  SINGLE_TABLE_PARTITION.put(HANASourceConnectorConstants.TABLE_NAME_KEY, SINGLE_TABLE_NAME + "_0")
-  protected val SECOND_TABLE_PARTITION = new util.HashMap[String, Object]()
-  SECOND_TABLE_PARTITION.put(HANASourceConnectorConstants.TABLE_NAME_KEY, SECOND_TABLE_NAME + "_0")
+  protected val SINGLE_TABLE_NAME_FOR_BULK_LOAD = "\"TEST\".\"EMPLOYEES_SOURCE\""
+
+  protected val SINGLE_TABLE_NAME_FOR_INCR_LOAD = "\"TEST\".\"EMPLOYEES_SOURCE_FOR_INCR_LOAD\""
+
+  protected val FIRST_TABLE_NAME_FOR_MULTI_LOAD = "\"TEST\".\"EMPLOYEES_SOURCE_FOR_MULTI_LOAD\""
+  protected val SECOND_TABLE_NAME_FOR_MULTI_LOAD = "\"TEST\".\"EMPLOYEES_SOURCE_SECOND_FOR_MULTI_LOAD\""
+
+  protected val SINGLE_TABLE_PARTITION_FOR_BULK_LOAD = new util.HashMap[String, String]()
+  SINGLE_TABLE_PARTITION_FOR_BULK_LOAD.put(SourceConnectorConstants.TABLE_NAME_KEY, SINGLE_TABLE_NAME_FOR_BULK_LOAD + "_0")
+  protected val SINGLE_TABLE_PARTITION_FOR_INCR_LOAD = new util.HashMap[String, String]()
+  SINGLE_TABLE_PARTITION_FOR_INCR_LOAD.put(SourceConnectorConstants.TABLE_NAME_KEY, SINGLE_TABLE_NAME_FOR_INCR_LOAD + "_0")
+  protected val FIRST_TABLE_PARTITION_FOR_MULTI_LOAD = new util.HashMap[String, String]()
+  FIRST_TABLE_PARTITION_FOR_MULTI_LOAD.put(SourceConnectorConstants.TABLE_NAME_KEY, FIRST_TABLE_NAME_FOR_MULTI_LOAD + "_0")
+  protected val SECOND_TABLE_PARTITION_FOR_MULTI_LOAD = new util.HashMap[String, String]()
+  SECOND_TABLE_PARTITION_FOR_MULTI_LOAD.put(SourceConnectorConstants.TABLE_NAME_KEY, SECOND_TABLE_NAME_FOR_MULTI_LOAD + "_0")
 
   protected val TOPIC = "test-topic"
   protected val SECOND_TOPIC = "test-second-topic"
@@ -33,16 +43,19 @@ class HANASourceTaskTestBase extends FunSuite
   override def beforeAll(): Unit = {
     time = new MockTime()
     jdbcClient = new MockJdbcClient(
-      Parameters.getConfig(singleTableConfig()))
+      HANAParameters.getConfig(singleTableConfig()))
+    jdbcClient.getConnection.createStatement().execute("DROP ALL OBJECTS DELETE FILES")
+
     task = new HANASourceTask(time, jdbcClient)
 
     val offsetStorageReader = mock(classOf[OffsetStorageReader])
 
     val partitions = new util.HashMap[String, String]()
-    val tableName = SINGLE_TABLE_NAME + "0"
-    partitions.put(HANASourceConnectorConstants.TABLE_NAME_KEY, tableName)
-    val secondTableName = SECOND_TABLE_NAME + "0"
-    partitions.put(HANASourceConnectorConstants.TABLE_NAME_KEY, secondTableName)
+    partitions.putAll(SINGLE_TABLE_PARTITION_FOR_BULK_LOAD)
+    partitions.putAll(SINGLE_TABLE_PARTITION_FOR_INCR_LOAD)
+    partitions.putAll(FIRST_TABLE_PARTITION_FOR_MULTI_LOAD)
+    partitions.putAll(SECOND_TABLE_PARTITION_FOR_MULTI_LOAD)
+
     val offsets: java.util.Map[java.util.Map[String, String],
       java.util.Map[String, Object]] = new util.HashMap[java.util.Map[String, String],
                                         java.util.Map[String, Object]]()
@@ -68,17 +81,21 @@ class HANASourceTaskTestBase extends FunSuite
     val connection = jdbcClient.getConnection
     val stmt = connection.createStatement()
     stmt.execute("drop table \"SYS\".\"M_CS_PARTITIONS\"")
+
+    stmt.execute("DROP ALL OBJECTS DELETE FILES")
   }
 
   protected def singleTableConfig(): java.util.Map[String, String] = {
     val props = new util.HashMap[String, String]()
-    props.put("connection.url", "jdbc:h2:mem:test;" +
+
+    val tmpDir = System.getProperty("java.io.tmpdir")
+    props.put("connection.url", "jdbc:h2:file:" + tmpDir + "test;" +
       "INIT=CREATE SCHEMA IF NOT EXISTS TEST")
     props.put("connection.user", "sa")
     props.put("connection.password", "sa")
     props.put("mode", "bulk")
     props.put("topics", TOPIC)
-    props.put(s"$TOPIC.table.name", SINGLE_TABLE_NAME)
+    props.put(s"$TOPIC.table.name", SINGLE_TABLE_NAME_FOR_BULK_LOAD)
     props.put(s"$TOPIC.partition.count", "1")
     props.put(s"$TOPIC.poll.interval.ms", "60000")
 
@@ -87,18 +104,20 @@ class HANASourceTaskTestBase extends FunSuite
 
   protected def multiTableConfig(): java.util.Map[String, String] = {
     val props = new util.HashMap[String, String]()
-    props.put("connection.url", "jdbc:h2:mem:test;" +
+
+    val tmpDir = System.getProperty("java.io.tmpdir")
+    props.put("connection.url", "jdbc:h2:file:" + tmpDir + "test;" +
       "INIT=CREATE SCHEMA IF NOT EXISTS TEST")
     props.put("connection.user", "sa")
     props.put("connection.password", "sa")
     props.put("mode", "bulk")
     props.put("topics", s"$TOPIC,$SECOND_TOPIC")
 
-    props.put(s"$TOPIC.table.name", SINGLE_TABLE_NAME)
+    props.put(s"$TOPIC.table.name", FIRST_TABLE_NAME_FOR_MULTI_LOAD)
     props.put(s"$TOPIC.partition.count", "1")
     props.put(s"$TOPIC.poll.interval.ms", "60000")
 
-    props.put(s"$SECOND_TOPIC.table.name", SECOND_TABLE_NAME)
+    props.put(s"$SECOND_TOPIC.table.name", SECOND_TABLE_NAME_FOR_MULTI_LOAD)
     props.put(s"$SECOND_TOPIC.partition.count", "1")
     props.put(s"$SECOND_TOPIC.poll.interval.ms", "60000")
 

@@ -1,8 +1,8 @@
 package com.sap.kafka.connect.source.querier
 
-import com.sap.kafka.hanaClient.HANAJdbcClient
-import com.sap.kafka.connect.config.HANAConfig
-import com.sap.kafka.connect.source.HANASourceConnectorConstants
+import com.sap.kafka.client.hana.HANAJdbcClient
+import com.sap.kafka.connect.config.BaseConfig
+import com.sap.kafka.connect.source.SourceConnectorConstants
 import com.sap.kafka.connect.source.querier.QueryMode.QueryMode
 import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.connect.source.SourceRecord
@@ -11,8 +11,8 @@ import scala.collection.JavaConverters._
 
 class IncrColTableQuerier(mode: QueryMode, table: String, tablePartition: Int, topic: String,
                           incrementingColumn: String, offsetMap: Map[String, Object],
-                          hanaSourceConfig: HANAConfig, hanaJdbcClient: Option[HANAJdbcClient])
-      extends TableQuerier(mode, table, topic, hanaSourceConfig, hanaJdbcClient) {
+                          config: BaseConfig, jdbcClient: Option[HANAJdbcClient])
+      extends TableQuerier(mode, table, topic, config, jdbcClient) {
 
   private var incrColumn: String = _
   private var incrColumnType: Int = java.sql.Types.INTEGER
@@ -61,7 +61,7 @@ class IncrColTableQuerier(mode: QueryMode, table: String, tablePartition: Int, t
         mode match {
           case QueryMode.TABLE =>
             val partitionName = tableName + tablePartition.toString
-            partition = Map(HANASourceConnectorConstants.TABLE_NAME_KEY -> partitionName)
+            partition = Map(SourceConnectorConstants.TABLE_NAME_KEY -> partitionName)
           case _ => throw new ConfigException(s"Unexpected Query Mode: $mode")
         }
         new SourceRecord(partition.asJava, offset.toMap(), topic,
@@ -75,7 +75,7 @@ class IncrColTableQuerier(mode: QueryMode, table: String, tablePartition: Int, t
     ", topic='" + topic + "'}"
 
   private def getIncrementingColumn(incrementingCol: String): String = {
-    val metadata = getOrCreateHanaJdbcClient().get.getMetaData(table, None)
+    val metadata = getOrCreateJdbcClient().get.getMetaData(table, None)
 
     metadata.foreach(metaAttr => {
       if (metaAttr.name.equals(incrementingCol)) {
@@ -102,8 +102,8 @@ class IncrColTableQuerier(mode: QueryMode, table: String, tablePartition: Int, t
     * this just takes the highest available topic partition to write.
     */
   private def getPartition(tablePartition: Int, topic: String): Int = {
-    val maxPartitions = hanaSourceConfig.topicProperties(topic)
-      .get("partition.count").get.toInt
+    val topicProperties = config.topicProperties(topic)
+    val maxPartitions = topicProperties("partition.count").toInt
     tablePartition % maxPartitions
   }
 }

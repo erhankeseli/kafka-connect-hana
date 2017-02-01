@@ -23,7 +23,7 @@ For getting started with this connector, the following steps need to be complete
 
 ```
 name=test-sink
-connector.class=com.sap.kafka.connect.sink.HANASinkConnector
+connector.class=com.sap.kafka.connect.sink.hana.HANASinkConnector
 tasks.max=1
 topics=test_topic
 connection.url=jdbc:sap://<url>/
@@ -44,7 +44,7 @@ test_topic.table.name="SYSTEM"."DUMMY_TABLE"
 
 ```
 name=kafka-connect-source
-connector.class=com.sap.kafka.connect.source.HANASourceConnector
+connector.class=com.sap.kafka.connect.source.hana.HANASourceConnector
 tasks.max=1
 topics=kafka_source_1,kafka_source_2
 connection.url=jdbc:sap://<url>/

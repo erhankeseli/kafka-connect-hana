@@ -2,9 +2,10 @@ package com.sap.kafka.connect.source
 
 import java.util
 
+import com.sap.kafka.client.MetaSchema
 import com.sap.kafka.connect.MockJdbcClient
-import com.sap.kafka.connect.config.Parameters
-import com.sap.kafka.hanaClient.MetaSchema
+import com.sap.kafka.connect.config.hana.HANAParameters
+import com.sap.kafka.connect.source.hana.HANASourceTask
 import org.apache.kafka.connect.data.{Field, Schema, SchemaBuilder, Struct}
 import org.scalatest.BeforeAndAfterEach
 
@@ -25,14 +26,41 @@ class HANASourceTaskUpdateTest extends HANASourceTaskTestBase
   override def beforeAll(): Unit = {
     super.beforeAll()
     incrLoadJdbcClient = new MockJdbcClient(
-      Parameters.getConfig(singleTableConfigInIncrementalMode()))
+      HANAParameters.getConfig(singleTableConfigInIncrementalMode()))
     incrLoadTask = new HANASourceTask(time, incrLoadJdbcClient)
     multiTableJdbcClient = new MockJdbcClient(
-      Parameters.getConfig(multiTableConfig()))
+      HANAParameters.getConfig(multiTableConfig()))
     multiTableLoadTask = new HANASourceTask(time, multiTableJdbcClient)
+
+    jdbcClient.createTable(Some("TEST"),
+      SINGLE_TABLE_NAME_FOR_BULK_LOAD.split("\\.")(1).replace("\"", ""),
+      MetaSchema(null, Seq(new Field("id", 1, Schema.INT32_SCHEMA))),
+      3000)
+    incrLoadJdbcClient.createTable(Some("TEST"),
+      SINGLE_TABLE_NAME_FOR_INCR_LOAD.split("\\.")(1).replace("\"", ""),
+      MetaSchema(null, Seq(new Field("id", 1, Schema.INT32_SCHEMA),
+        new Field("name", 2, Schema.STRING_SCHEMA))), 3000)
+    multiTableJdbcClient.createTable(Some("TEST"),
+      FIRST_TABLE_NAME_FOR_MULTI_LOAD.split("\\.")(1).replace("\"", ""),
+      MetaSchema(null, Seq(new Field("id", 1, Schema.INT32_SCHEMA))), 3000)
+    multiTableJdbcClient.createTable(Some("TEST"),
+      SECOND_TABLE_NAME_FOR_MULTI_LOAD.split("\\.")(1).replace("\"", ""),
+      MetaSchema(null, Seq(new Field("id", 1, Schema.INT32_SCHEMA))), 3000)
   }
 
   override def afterAll(): Unit = {
+    var connection = jdbcClient.getConnection
+    var statement = connection.createStatement()
+    statement.execute("drop table " + SINGLE_TABLE_NAME_FOR_BULK_LOAD)
+
+    connection = multiTableJdbcClient.getConnection
+    statement = connection.createStatement()
+    statement.execute("drop table " + FIRST_TABLE_NAME_FOR_MULTI_LOAD)
+    statement.execute("drop table " + SECOND_TABLE_NAME_FOR_MULTI_LOAD)
+
+    connection = incrLoadJdbcClient.getConnection
+    statement = connection.createStatement()
+    statement.execute("drop table " + SINGLE_TABLE_NAME_FOR_INCR_LOAD)
     super.afterAll()
   }
 
@@ -46,12 +74,9 @@ class HANASourceTaskUpdateTest extends HANASourceTaskTestBase
   }
 
   test("bulk periodic load") {
-    jdbcClient.createTable(Some("TEST"), "EMPLOYEES_SOURCE",
-                           MetaSchema(null, Seq(new Field("id", 1, Schema.INT32_SCHEMA))),
-                           3000)
     val connection = jdbcClient.getConnection
     val stmt = connection.createStatement()
-    stmt.execute("insert into \"TEST\".\"EMPLOYEES_SOURCE\" values(1)")
+    stmt.execute("insert into " + SINGLE_TABLE_NAME_FOR_BULK_LOAD + " values(1)")
 
     val expectedSchema = SchemaBuilder.struct().name("expected schema")
                     .field("id", Schema.INT32_SCHEMA)
@@ -69,7 +94,7 @@ class HANASourceTaskUpdateTest extends HANASourceTaskTestBase
         expectedSchema)
     })
 
-    stmt.execute("insert into \"TEST\".\"EMPLOYEES_SOURCE\" values(2)")
+    stmt.execute("insert into " + SINGLE_TABLE_NAME_FOR_BULK_LOAD + "values(2)")
     records = task.poll()
     //because this reads everything
     assert(records.size() === 2)
@@ -84,25 +109,18 @@ class HANASourceTaskUpdateTest extends HANASourceTaskTestBase
         expectedSchema)
       count = count + 1
     })
-    stmt.execute("drop table \"TEST\".\"EMPLOYEES_SOURCE\"")
   }
 
   test("bulk periodic load on multiple tables") {
-    multiTableJdbcClient.createTable(Some("TEST"), "EMPLOYEES_SOURCE",
-                                    MetaSchema(null, Seq(new Field("id", 1, Schema.INT32_SCHEMA))),
-                                    3000)
     val connection = multiTableJdbcClient.getConnection
     val stmt = connection.createStatement()
-    stmt.execute("insert into \"TEST\".\"EMPLOYEES_SOURCE\" values(1)")
+    stmt.execute("insert into " + FIRST_TABLE_NAME_FOR_MULTI_LOAD + "values(1)")
 
     val expectedSchemaForSingleTable = SchemaBuilder.struct()
       .name("expected schema for single table")
       .field("id", Schema.INT32_SCHEMA)
 
-    multiTableJdbcClient.createTable(Some("TEST"), "EMPLOYEES_SOURCE_SECOND",
-                                      MetaSchema(null, Seq(new Field("id", 1, Schema.INT32_SCHEMA))),
-                                        3000)
-    stmt.execute("insert into \"TEST\".\"EMPLOYEES_SOURCE_SECOND\" values(2)")
+    stmt.execute("insert into " + SECOND_TABLE_NAME_FOR_MULTI_LOAD + "values(2)")
 
     val expectedSchemaForSecondTable = SchemaBuilder.struct()
       .name("expected schema for second table")
@@ -133,18 +151,12 @@ class HANASourceTaskUpdateTest extends HANASourceTaskTestBase
           expectedSchemaForSecondTable)
       }
     })
-
-    stmt.execute("drop table \"TEST\".\"EMPLOYEES_SOURCE\"")
-    stmt.execute("drop table \"TEST\".\"EMPLOYEES_SOURCE_SECOND\"")
   }
 
   test("incremental column load test") {
-    incrLoadJdbcClient.createTable(Some("TEST"), "EMPLOYEES_SOURCE",
-                              MetaSchema(null, Seq(new Field("id", 1, Schema.INT32_SCHEMA),
-                                new Field("name", 2, Schema.STRING_SCHEMA))), 3000)
     val connection = incrLoadJdbcClient.getConnection
     val stmt = connection.createStatement()
-    stmt.execute("insert into \"TEST\".\"EMPLOYEES_SOURCE\" values(1, 'Lukas')")
+    stmt.execute("insert into " + SINGLE_TABLE_NAME_FOR_INCR_LOAD + "values(1, 'Lukas')")
 
     val expectedSchema = SchemaBuilder.struct().name("expected schema")
                           .field("id", Schema.INT32_SCHEMA)
@@ -165,7 +177,7 @@ class HANASourceTaskUpdateTest extends HANASourceTaskTestBase
         expectedSchema)
     })
 
-    stmt.execute("insert into \"TEST\".\"EMPLOYEES_SOURCE\" values(2, 'Lukas')")
+    stmt.execute("insert into " + SINGLE_TABLE_NAME_FOR_INCR_LOAD + "values(2, 'Lukas')")
     records = incrLoadTask.poll()
     // because this only takes the delta
     assert(records.size() === 1)
@@ -180,8 +192,6 @@ class HANASourceTaskUpdateTest extends HANASourceTaskTestBase
       compareData(expectedData, record.value().asInstanceOf[Struct],
         expectedSchema)
     })
-
-    stmt.execute("drop table \"TEST\".\"EMPLOYEES_SOURCE\"")
   }
 
   private def compareSchema(expectedSchema: Schema, actualSchema: Schema): Unit = {
@@ -210,13 +220,15 @@ class HANASourceTaskUpdateTest extends HANASourceTaskTestBase
   protected def singleTableConfigInIncrementalMode():
   java.util.Map[String, String] = {
     val props = new util.HashMap[String, String]()
-    props.put("connection.url", "jdbc:h2:mem:test;" +
+
+    val tmpDir = System.getProperty("java.io.tmpdir")
+    props.put("connection.url", "jdbc:h2:file:" + tmpDir + "test;" +
       "INIT=CREATE SCHEMA IF NOT EXISTS TEST")
     props.put("connection.user", "sa")
     props.put("connection.password", "sa")
     props.put("mode", "incrementing")
     props.put("topics", TOPIC)
-    props.put(s"$TOPIC.table.name", SINGLE_TABLE_NAME)
+    props.put(s"$TOPIC.table.name", SINGLE_TABLE_NAME_FOR_INCR_LOAD)
     props.put(s"$TOPIC.partition.count", "5")
     props.put(s"$TOPIC.poll.interval.ms", "60000")
     props.put(s"$TOPIC.incrementing.column.name", "id")

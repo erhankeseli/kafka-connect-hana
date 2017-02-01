@@ -1,8 +1,7 @@
 package com.sap.kafka.connect.source
 
 import java.lang.{Boolean, Double, Float, Long}
-
-import com.sap.kafka.hanaClient.MetaSchema
+import com.sap.kafka.client.MetaSchema
 import org.apache.kafka.connect.data.Schema.Type
 import org.apache.kafka.connect.data.{Field, Schema, Struct}
 import org.apache.kafka.connect.source.SourceRecord

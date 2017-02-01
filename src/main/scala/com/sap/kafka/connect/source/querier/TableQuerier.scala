@@ -1,9 +1,10 @@
 package com.sap.kafka.connect.source.querier
 
-import com.sap.kafka.hanaClient.HANAJdbcClient
-import com.sap.kafka.connect.config.HANAConfig
+import com.sap.kafka.client.hana.HANAJdbcClient
+import com.sap.kafka.connect.config.BaseConfig
+import com.sap.kafka.connect.config.hana.HANAConfig
 import com.sap.kafka.connect.source.querier.QueryMode.QueryMode
-import com.sap.kafka.utils.JdbcTypeConverter
+import com.sap.kafka.utils.hana.HANAJdbcTypeConverter
 import org.apache.kafka.connect.data.{Schema, Struct}
 import org.apache.kafka.connect.source.SourceRecord
 import org.slf4j.LoggerFactory
@@ -14,8 +15,8 @@ object QueryMode extends Enumeration {
 }
 
 abstract class TableQuerier(mode: QueryMode, table: String,
-                            topic: String, hanaSourceConfig: HANAConfig,
-                            var hanaJdbcClient: Option[HANAJdbcClient])
+                            topic: String, config: BaseConfig,
+                            var jdbcClient: Option[HANAJdbcClient])
                 extends Comparable[TableQuerier] {
   var tableName: String = if (mode.equals(QueryMode.TABLE)) table else null
   var lastUpdate: Long = 0
@@ -38,12 +39,11 @@ abstract class TableQuerier(mode: QueryMode, table: String,
 
   def maybeStartQuery(): Unit = {
     if (resultList.isEmpty) {
-      val metadata = getOrCreateHanaJdbcClient().get.getMetaData(table, None)
-      schema = JdbcTypeConverter.convertHANAMetadataToSchema(tableName, metadata)
+      schema = getSchema()
       queryString = getOrCreateQueryString()
 
-      val batchMaxRows = hanaSourceConfig.batchMaxRows
-      resultList = getOrCreateHanaJdbcClient().get.executeQuery(schema, queryString.get,
+      val batchMaxRows = config.batchMaxRows
+      resultList = getOrCreateJdbcClient().get.executeQuery(schema, queryString.get,
         0, batchMaxRows)
       log.info(resultList.size.toString)
     }
@@ -58,12 +58,24 @@ abstract class TableQuerier(mode: QueryMode, table: String,
     lastUpdate = now
   }
 
-  protected def getOrCreateHanaJdbcClient(): Option[HANAJdbcClient] = {
-    if (hanaJdbcClient.isDefined) {
-      return hanaJdbcClient
+  protected def getOrCreateJdbcClient(): Option[HANAJdbcClient] = {
+    if (jdbcClient.isDefined) {
+      return jdbcClient
     }
-    hanaJdbcClient = Some(HANAJdbcClient(hanaSourceConfig))
-    hanaJdbcClient
+
+    config match {
+      case hanaConfig: HANAConfig => Some(HANAJdbcClient(hanaConfig))
+      case _ => throw new RuntimeException("Cannot create Jdbc Client")
+    }
+  }
+
+  private def getSchema(): Schema = {
+    if (getOrCreateJdbcClient().get.isInstanceOf[HANAJdbcClient]) {
+      val metadata = getOrCreateJdbcClient().get.getMetaData(table, None)
+      HANAJdbcTypeConverter.convertHANAMetadataToSchema(tableName, metadata)
+    } else {
+      throw new RuntimeException("Jdbc Client is not available")
+    }
   }
 
   override def compareTo(other: TableQuerier): Int = {
