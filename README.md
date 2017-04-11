@@ -63,7 +63,7 @@ Configuration
 =============
 
 The `kafka connector for SAP Hana` provides a wide set of configuration options both for source & sink.
-The full list of default configuration options is documented [here](https://github.wdf.sap.corp/i033085/kafka-connect-hana/blob/master/Configuration.md). 
+The full list of default configuration options is documented [here](https://github.com/santi81/kafka-connect-hana/blob/master/Configuration.md). 
 
 Examples
 ========
